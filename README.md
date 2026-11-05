@@ -1,96 +1,93 @@
 # HostRouter
 
-Velocity plugin for hostname-selected networks, backend MOTDs and authentication-aware routing. Source and build output live entirely in this folder. **PeakLogin has not been modified.**
+Run multiple Minecraft networks behind one Velocity proxy. HostRouter selects a network from the hostname, shows that network's backend MOTD, and routes players after PeakLogin authentication.
 
-## Requirements and installation
+**[Download latest JAR](https://github.com/BasperLasper/HOSTROUTER/releases/latest)** · **[Releases and upgrading](docs/releases.md)** · **[Step-by-step installation](docs/installation.md)** · **[Commands and permissions](docs/commands.md)**
 
-- Java **25** and Velocity **4.2.0**. The supplied PeakLogin project uses this API and Java version; Velocity 4.2.0 API classes have Java class-file version 69. This artifact cannot run on Java 21 or Velocity 3.x.
-- Use the supplied PeakLogin plugin (`peaklogin` plugin ID) for networks requiring authentication. HostRouter contains no authentication implementation.
-- Register `lobby`, `smp4`, `skyblock` (or your chosen names) in `velocity.toml`. Secure your backends with Velocity modern forwarding and network access restrictions.
+> **Set a MOTD on every backend server.** Edit the `motd=` line in each backend's own `server.properties`, then restart that backend. HostRouter reads the MOTD from the network's configured `motd-source`; there is no separate HostRouter MOTD editor.
 
-1. Download `HostRouter-1.0.4.jar` from the [GitHub release](https://github.com/BasperLasper/HOSTROUTER/releases/tag/v1.0.4), or build it from source, and copy it to your Velocity `plugins/` directory alongside PeakLoginVelocity.jar.
-2. Start Velocity with Java 25. SQLite uses native libraries; add `--enable-native-access=ALL-UNNAMED` before `-jar` to authorize native loading explicitly on Java 25.
-3. HostRouter creates `plugins/hostrouter/` with the six example YAML files in `src/main/resources`. Review these before accepting traffic. **All default networks start on `lobby`; PeakLogin's `login-server` must also be `lobby`.**
-4. Ensure the public DNS addresses point to your proxy. HostRouter uses the hostname from Velocity's handshake virtual host, with no reverse DNS or hostname resolution.
-5. Grant the permissions documented in [commands.md](docs/commands.md), then use `/hr hostname test play.peaksmp.us`, `/hr status` and `/hr servers`.
-6. Set Velocity `ping-passthrough = "DISABLED"` to avoid competing MOTD forwarding. Remove conflicting forced-host entries and plugins that select initial servers or replace pings. HostRouter selects the initial server at LAST event order; other handlers at the same order may conflict.
-7. Test each network using a real client: login/register, remembered login, verified premium login, disconnect, unavailable destination, and maintenance. Run these checks on a staging proxy before enabling production traffic.
+## Requirements
 
-The delivered JAR was compiled and tested locally. Automated tests exercise API behavior with proxy mocks and real SQLite; they do not replace a live Velocity/PeakLogin/client deployment test.
+- **Java 25** and **Velocity 4.2.0**. This build does not run on Java 21 or Velocity 3.x.
+- **PeakLogin** on Velocity for networks that require authentication. HostRouter integrates with its existing public methods; PeakLogin remains unchanged. See [integration details](docs/peaklogin.md).
+- Registered, reachable backend servers. The defaults use **`lobby`**, **`smp4`** and **`skyblock`**.
 
-## Default networks
+## Quick setup
 
-| Identifier | Initial | After authentication | Backend MOTD | Player display |
-|---|---|---|---|---|
-| peakmc | lobby | lobby | lobby | All proxy players / global maximum 500 |
-| peaksmp | lobby | smp4 | smp4 | Assigned PeakSMP sessions / 200 |
-| skyboxy | lobby | skyblock | skyblock | Assigned SkyBloxy sessions / 200 |
+1. [Download the latest release](https://github.com/BasperLasper/HOSTROUTER/releases/latest). Put its HostRouter JAR in Velocity's `plugins/` folder. When upgrading, remove the older HostRouter JAR first.
+2. Register `lobby`, `smp4` and `skyblock` in `velocity.toml`, using your backend addresses. Set `ping-passthrough = "DISABLED"` and remove conflicting forced-host entries. Keep your forwarding and backend access restrictions configured.
+3. **Set each backend's MOTD in that server's `server.properties`.** For example:
 
-`peaksmp.us`, `play.peaksmp.us`, `mc.peaksmp.us`, `affiliate.peaksmp.us` and `peaksmp.affiliate-domain.com` match the **whole DNS label** `peaksmp`. `fakepeaksmp.us` does not. Networks can have multiple label or domain identifiers and exact hostname aliases.
+   | Backend | Its own `server.properties` | Used for |
+   |---|---|---|
+   | `lobby` | `motd=Welcome to PeakMC` | PeakMC |
+   | `smp4` | `motd=Welcome to PeakSMP` | PeakSMP |
+   | `skyblock` | `motd=Welcome to SkyBoxy` | SkyBoxy |
 
-Precedence is exact alias, then domain suffix identifier, then whole-label identifier; higher `priority` breaks ties within a rule type. Equal-precedence, equal-priority matches between networks are rejected. Disabled networks participate in matching and then deny connections, so another network cannot capture their names. Unknown/invalid/ambiguous connections are rejected; unknown pings retain Velocity's response.
+   Keep `enable-status=true` on the backends so HostRouter can fetch their status. Restart each backend after editing its properties. Configure a MOTD for any additional backend you add, too.
+4. Start Velocity to generate `plugins/hostrouter/`. Check `networks.yml` against the table below. **All default networks start on `lobby`, so PeakLogin's `login-server` must also be `lobby`.**
+5. Point the hostnames at your proxy. If players use `play.skyboxy.net:9321`, port `9321` must reach the Velocity listener; HostRouter does not open ports.
+6. From the proxy console, run:
 
-Hostnames are untrusted routing hints. Anyone can supply a hostname in a Minecraft handshake; it grants no authentication or administrative privilege. Original hostname and normalized hostname stay in the session and are never recomputed on backend transfers. Unicode domains normalize to IDNA ASCII, case is folded, trailing dots and optional valid ports are removed. Malformed labels, control characters, IPv6 literals and single-label hosts are rejected.
+   ```text
+   hr status
+   hr servers
+   hr hostname test play.peaksmp.us
+   hr hostname test play.skyboxy.net:9321
+   ```
 
-## Configuration
+7. Grant permissions with your Velocity permission provider, then test each network with a real client. Use `/` before commands in-game; omit it in the proxy console.
 
-All six YAML files are generated from the bundled examples. Changes through commands validate, create a backup, atomically replace the relevant file, then publish an immutable in-memory snapshot. Ordinary changes require no restart. `/hr reload` validates all files before publishing; a failure retains the active snapshot. Fix invalid files on disk before retrying. Atomic replacement requires filesystem support; otherwise the edit fails safely.
+See the [installation guide](docs/installation.md) for example configuration, permissions and checks.
 
-- `config.yml`: debug logging; ping/health refresh (15 seconds), stale cache lifetime (300 seconds), ping timeout (4 seconds), failure threshold (3), count refresh (2 seconds), authentication check (500 ms), global maximum.
-- `networks.yml`: matching, backend selection, counts, maintenance and per-network analytics/Discord switches.
-- `messages.yml`: fallback and rejection messages, plain text. HostRouter provides no MOTD editor. Backend `server.properties` remains the source of the MOTD; maintenance/disabled ping responses use the relevant rejection message.
-- `privacy.yml`: persisted visibility preferences keyed by administrator UUID (or `console`). Hostnames show only with explicit `hostrouter.info.hostname`; IPs require explicit `hostrouter.info.ip` **and** opting in via `/hr toggle ip`.
-- `webhooks.yml`: secret URLs, event routes, titles, colours and toggles. Add routes using `webhook bind` or bind every event with `/hr webhook bindall <name>` (existing event toggles are preserved); adding a URL alone does not subscribe it to events. Optional analytics reports are emitted hourly when enabled.
-- `statistics.yml`: global enable switch and retention, default 365 days. `statistics: false` disables collection for a network's new sessions. A session's collection flag is captured at its first successful backend connection so its final duration remains consistent.
+## Default routing and MOTDs
 
-Additional optional network fields:
+| Network | Hostname identifier | Initial server | After authentication | MOTD source | Player count |
+|---|---|---|---|---|---|
+| PeakMC | `peakmc` | `lobby` | `lobby` | `lobby` | All proxy players / 500 |
+| PeakSMP | `peaksmp` | `lobby` | `smp4` | `smp4` | Assigned PeakSMP players / 200 |
+| SkyBoxy | `skyboxy` | `lobby` | `skyblock` | `skyblock` | Assigned SkyBoxy players / 200 |
 
-```yaml
-backup-server: lobby
-priority: 10
-maintenance-message: 'PeakSMP is being updated.'
-require-authentication: true
-statistics: true
-discord: true
-```
+Identifiers match whole DNS labels, so `peaksmp.us`, `play.peaksmp.us` and `peaksmp.affiliate-domain.com` match `peaksmp`. `fakepeaksmp.us` does not. Explicit aliases, domain identifiers and priorities support additional networks and affiliate addresses.
 
-`player-count-mode` is `global`, `network` or `backend`. Global counts use every connected Velocity player, including players not assigned by HostRouter. Network counts use hostname session assignments even while players wait in the lobby or move servers. Backend counts use connected players on the configured destination. Counts are display values, refreshed periodically; maximums do not impose admission limits.
+**HostRouter forwards the backend MOTD, but retains Velocity's version name and protocol.** It replaces player counts and removes backend sample player names. MOTDs are cached; with the default settings, allow about 15 seconds for a refreshed backend MOTD to appear.
 
-Up to 1,000 networks, 256 matching rules per network, 100 webhooks, 30 retained configuration backups and 10,000 queued database operations keep resource use bounded. Backend cache entries are restricted to configured backend names, never arbitrary public hostnames. Backups contain webhook secrets: restrict access to the plugin directory. SQLite retention pruning runs hourly when new connections are recorded. Stopped/interrupted sessions with no recorded end are excluded from average session duration.
+## Common commands
 
-## Routing, MOTDs and failure handling
+| Task | In-game command |
+|---|---|
+| Check routing and backends | `/hr status`, `/hr servers` |
+| Test a hostname | `/hr hostname test play.skyboxy.net:9321` |
+| Set a network's MOTD source | `/hr network set peaksmp motd-source smp4` |
+| Reload HostRouter YAML | `/hr reload` |
+| Toggle personal join alerts | `/hr alerts`, `/hr alerts on`, `/hr alerts off` |
+| Bind a Discord webhook to every event | `/hr webhook bindall <name>` |
+| Put one network into maintenance | `/hr maintenance peaksmp on` |
 
-See [architecture.md](docs/architecture.md) and [PeakLogin integration](docs/peaklogin.md).
+Join alerts are **on by default** for players with `hostrouter.alerts` or `hostrouter.admin`; personal preferences persist. Hostname details require `hostrouter.info.hostname`. IP visibility is independently restricted and off by default.
 
-Backend pings are asynchronous `RegisteredServer.ping()` futures. Server-list events use only cached responses and count snapshots, with no network or disk I/O. Responses preserve backend Adventure MOTD formatting, favicon and mod information exposed by Velocity. The version name and protocol remain those of the incoming Velocity ping response; backend versions are never forwarded. Player counts are replaced, and backend sample player names are deliberately removed to avoid leaking another network's players. No raw ping properties outside the official API are copied.
+`/hr reload` reloads HostRouter YAML. It **does not reload backend `server.properties`**; restart the backend after changing its MOTD. Existing HostRouter configuration is preserved when upgrading the JAR. For old `smp`/`skybloxy` settings, follow the [upgrade instructions](docs/upgrade-1.0.1.md).
 
-Unavailable backends retain the last good MOTD until `ping-stale-seconds`. With no usable cache, the existing Velocity ping response supplies the fallback description and version. Health uses the same refresh interval as the ping cache; threshold failures mark a backend offline, and a successful ping announces recovery. Health pings use Velocity's default backend ping options rather than creating cache entries per incoming hostname or protocol.
+## Documentation
 
-Destination routing waits for PeakLogin's actual authenticated state, then attempts the destination once per session. If it fails, the player remains on the current server or gets one optional backup/lobby fallback attempt. No automatic destination retry occurs after recovery; players can change server through your existing permitted server command. Fallback attempts are bounded to avoid loops. Initial authentication-server failure rejects the connection because moving an unauthenticated player elsewhere would conflict with PeakLogin's isolation policy. Health status is a hint; a successful ping cannot guarantee the next connection succeeds.
+- [Releases, download and upgrading](docs/releases.md)
+- [Installation and per-server MOTDs](docs/installation.md)
+- [Commands and permissions](docs/commands.md)
+- [Configuration, Discord, statistics and failure handling](docs/operations.md)
+- [PeakLogin integration and shared lobby requirement](docs/peaklogin.md)
+- [Troubleshooting and live acceptance checks](docs/troubleshooting.md)
+- [Architecture and API investigation](docs/architecture.md)
 
-Policy kicks from an online current server are left to Velocity. Failed server-connect kicks or kicks from a backend marked offline may redirect once to a safe fallback. HostRouter does not partition backend access after authentication; use an existing server permission system if players must be restricted to their assigned network.
+## Build from source
 
-## In-game join alerts
-
-Players with `hostrouter.alerts` (or `hostrouter.admin`) receive join alerts by default. Use `/hr alerts` to toggle, or `/hr alerts on|off` to set your preference. `/hr toggle alerts` is an alias. Preferences survive restarts; hostname details require the separate hostname permission and visibility preference. IPs are never included.
-
-## Discord and analytics
-
-Only HTTPS URLs on `discord.com`, `canary.discord.com`, or `ptb.discord.com` under the Discord webhook API are accepted; redirects, custom ports, query parameters and arbitrary external endpoints are rejected. Embeds disable mentions. A bounded queue sends asynchronously, serializes delivery, paces requests and honors retry headers (capped at 300 seconds) with at most three retries. Failed/dropped deliveries are logged without URLs. Queue contents are memory-only and discarded on shutdown. IP addresses are never included.
-
-Events: `joins`, `transfers`, `disconnects`, `security`, `administration`, `server-status`, `analytics`. Per-network `discord: false` suppresses its player/routing events; shared backend health and administration events remain global. Hostname connection rejections generate security events. Ping-only requests do not create join records or webhook floods. Avoid entering webhook URLs through in-game commands on proxies where command logging plugins are installed; editing `webhooks.yml` keeps secrets out of command history.
-
-SQLite stores a random session ID, salted SHA-256 digest of the player UUID, network, original hostname, start, completed duration and routing success/failure counters. It stores neither usernames nor IPs. Daily is the current UTC day; weekly and monthly are rolling 7/30 days. Reports show retained totals and top 20 networks/hostnames. Successful/failed transfers measure HostRouter destination attempts, while Discord transfer notifications also cover ordinary backend changes. Average duration covers completed sessions only. The retention window bounds historical totals.
-
-## Building and tests
+With Java 25 installed:
 
 ```sh
-cd HostRouter
-JAVA_HOME=/path/to/jdk-25 ./gradlew clean test jar
+git clone https://github.com/BasperLasper/HOSTROUTER.git
+cd HOSTROUTER
+./gradlew clean test jar
 ```
 
-Build output: `build/libs/HostRouter-1.0.4.jar`. Gradle wrapper is included; first build needs network access for dependencies. The JAR bundles SnakeYAML and SQLite JDBC (with native libraries); Velocity and PeakLogin are not bundled. No Bukkit/Paper server dependencies are used.
+Output: `build/libs/HostRouter-1.0.4.jar`. The Gradle wrapper downloads build dependencies on first use. SnakeYAML and SQLite JDBC are bundled; Velocity and PeakLogin are supplied separately. SQLite uses native libraries; on Java 25 you can authorize native access with `--enable-native-access=ALL-UNNAMED` before `-jar` in your Velocity launch command.
 
-Tests cover hostname matching/precedence, invalid input, atomic configuration behavior, privacy permissions, webhook endpoint restrictions, MOTD preservation, routing authentication and duplicate prevention, unavailable destinations, disconnects and persistent SQLite statistics. A live proxy, backend and Discord integration test remains a deployment task.
-
-See [troubleshooting.md](docs/troubleshooting.md) for operational checks and limitations.
+The 1.0.4 build passed **28 automated tests**. Live Velocity, backend, PeakLogin and Discord checks remain deployment checks; see the [test checklist](docs/troubleshooting.md#live-acceptance-checks).
