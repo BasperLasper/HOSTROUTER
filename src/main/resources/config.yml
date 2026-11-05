@@ -1,0 +1,9 @@
+debug: false
+# Unknown, invalid and ambiguous hosts fail closed. No DNS lookup is performed.
+ping-refresh-seconds: 15
+ping-stale-seconds: 300
+ping-timeout-seconds: 4
+health-failure-threshold: 3
+count-refresh-seconds: 2
+auth-check-milliseconds: 500
+global-max-players: 500

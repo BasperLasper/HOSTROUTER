@@ -1,0 +1,11 @@
+# URL values are secrets. Commands never print them. Only Discord HTTPS endpoints accepted.
+webhooks: {}
+events:
+  joins: {enabled: true, title: 'Player joined', colour: 5763719, webhooks: []}
+  transfers: {enabled: true, title: 'Player transferred', colour: 3447003, webhooks: []}
+  disconnects: {enabled: true, title: 'Player disconnected', colour: 9807270, webhooks: []}
+  security: {enabled: true, title: 'Routing security', colour: 15548997, webhooks: []}
+  administration: {enabled: true, title: 'HostRouter administration', colour: 16776960, webhooks: []}
+  server-status: {enabled: true, title: 'Backend health', colour: 15105570, webhooks: []}
+  analytics: {enabled: false, title: 'HostRouter analytics', colour: 10181046, webhooks: []}
+queue-capacity: 500

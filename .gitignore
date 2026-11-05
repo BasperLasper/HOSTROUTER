@@ -1,0 +1,8 @@
+.gradle/
+build/
+*.log
+
+# Build artifacts are published as GitHub release assets.
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+.DS_Store

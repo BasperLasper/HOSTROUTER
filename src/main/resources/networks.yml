@@ -1,0 +1,43 @@
+networks:
+  peakmc:
+    enabled: true
+    identifiers: [peakmc]
+    aliases: []
+    priority: 0
+    initial-server: lobby
+    destination-server: lobby
+    motd-source: lobby
+    player-count-mode: global
+    max-players: 500
+    require-authentication: true
+    maintenance: false
+    statistics: true
+    discord: true
+  peaksmp:
+    enabled: true
+    identifiers: [peaksmp]
+    aliases: []
+    priority: 0
+    initial-server: lobby
+    destination-server: smp4
+    motd-source: smp4
+    player-count-mode: network
+    max-players: 200
+    require-authentication: true
+    maintenance: false
+    statistics: true
+    discord: true
+  skyboxy:
+    enabled: true
+    identifiers: [skyboxy]
+    aliases: []
+    priority: 0
+    initial-server: lobby
+    destination-server: skyblock
+    motd-source: skyblock
+    player-count-mode: network
+    max-players: 200
+    require-authentication: true
+    maintenance: false
+    statistics: true
+    discord: true

@@ -1,0 +1,6 @@
+unknown-host: 'This hostname is not registered. Please use your network address.'
+disabled: 'This network is currently disabled.'
+maintenance: 'This network is undergoing maintenance. Please try again later.'
+unavailable: 'Your destination is unavailable. You will remain on a safe server.'
+initial-unavailable: 'The login server is unavailable. Please try again later.'
+auth-unavailable: 'Authentication integration is unavailable. Please contact an administrator.'

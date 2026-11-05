@@ -1,0 +1,3 @@
+# IP access always requires hostrouter.info.ip, even for hostrouter.admin.
+# IPs are never written to statistics or Discord.
+preferences: {}
