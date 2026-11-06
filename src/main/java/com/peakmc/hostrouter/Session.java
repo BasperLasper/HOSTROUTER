@@ -9,5 +9,7 @@ public final class Session {
     public final AtomicBoolean fallbackStarted=new AtomicBoolean();
     public volatile String action="Waiting for initial connection", backend="";
     public volatile boolean collecting;
+    /** When the first backend (lobby) connected, and when the client was first seen ready there. 0 = not yet. */
+    public volatile long connectedAt, readyAt;
     public Session(HostnameMatcher.Match match){original=match.original();normalized=match.normalized();network=match.network().name();}
 }

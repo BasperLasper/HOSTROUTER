@@ -16,7 +16,7 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
 
-@Plugin(id="hostrouter",name="HostRouter",version="1.0.4",authors={"PeakMC"},description="Hostname-aware multi-network routing",dependencies={@Dependency(id="peaklogin",optional=true)})
+@Plugin(id="hostrouter",name="HostRouter",version="1.0.6",authors={"PeakMC"},description="Hostname-aware multi-network routing",dependencies={@Dependency(id="peaklogin",optional=true)})
 public final class HostRouter {
     public final ProxyServer proxy;
     public final Logger logger;
@@ -27,6 +27,7 @@ public final class HostRouter {
     public Statistics stats;
     public BackendMonitor monitor;
     public final ConcurrentMap<UUID,Session> sessions=new ConcurrentHashMap<>();
+    java.util.function.LongSupplier clock=System::currentTimeMillis;
     private final HostnameMatcher matcher=new HostnameMatcher();
     public final ExecutorService administration=new ThreadPoolExecutor(1,1,0,TimeUnit.SECONDS,new ArrayBlockingQueue<>(256),Thread.ofPlatform().name("HostRouter-admin").daemon().factory(),new ThreadPoolExecutor.AbortPolicy());
     private ScheduledTask task;
@@ -84,6 +85,7 @@ public final class HostRouter {
         String previous=s.backend;s.backend=p.getCurrentServer().map(c->c.getServerInfo().getName()).orElse("");
         Network n=config.get().networks().get(s.network);if(n==null)return;
         if(previous.isBlank()) {
+            if(s.connectedAt==0)s.connectedAt=clock.getAsLong();
             JoinAlerts.announce(config,proxy.getAllPlayers(),p,s);
             s.collecting=stats!=null && stats.enabled(n);if(s.collecting)stats.join(s,p.getUniqueId());
             emit(n,"joins",p.getUsername()+" joined; host="+s.original+"; network="+s.network+"; initial="+s.backend);
@@ -110,7 +112,15 @@ public final class HostRouter {
         if(stopping || !p.isActive() || sessions.get(p.getUniqueId())!=s || p.getCurrentServer().isEmpty() || s.routed.get())return;
         Network n=config.get().networks().get(s.network);
         if(n==null || !n.enabled() || n.maintenance() && !p.hasPermission("hostrouter.maintenance.bypass")){s.action="Routing paused by network configuration";return;}
+        // The player left the initial server on their own (e.g. /server smp) while we were
+        // waiting for their client to load. Never yank them back afterwards.
+        String now=p.getCurrentServer().get().getServerInfo().getName();
+        if(!now.equals(n.initial())){
+            if(s.routed.compareAndSet(false,true))s.action=now.equals(n.destination())?"Destination already reached":"Player moved to "+now+"; automatic routing cancelled";
+            return;
+        }
         if(n.requireAuth() && !auth.authenticated(p)){s.action="Waiting for PeakLogin authentication";return;}
+        if(!clientLoaded(p,s)){s.action="Waiting for client to finish loading";return;}
         if(!s.routed.compareAndSet(false,true))return;
         String current=p.getCurrentServer().get().getServerInfo().getName();
         if(current.equals(n.destination())){s.action="Destination already reached";return;}
@@ -123,6 +133,22 @@ public final class HostRouter {
             if(error==null && result.isSuccessful()){s.action="Transferred to "+n.destination();if(s.collecting && stats!=null)stats.transfer(s,true);}
             else failed(p,s,n,"Destination connection failed");
         });
+    }
+    /**
+     * Moving a player while their client is still loading the lobby crashes it
+     * ("unknown packet id"). Premium players are authenticated instantly, so wait until
+     * PeakLogin reports the client joined, plus a short grace period. If PeakLogin is too
+     * old to report it, use a fixed delay; if the signal never comes, route after a timeout.
+     */
+    boolean clientLoaded(Player p,Session s) {
+        long now=clock.getAsLong();
+        if(s.connectedAt==0)return false;
+        var c=config.get();
+        Authentication.Ready ready=auth.ready(p);
+        if(ready==Authentication.Ready.READY && s.readyAt==0)s.readyAt=now;
+        if(s.readyAt!=0)return now-s.readyAt>=c.integer("route-delay-milliseconds",1000);
+        if(ready==Authentication.Ready.LOADING)return now-s.connectedAt>=c.integer("route-ready-timeout-milliseconds",15000);
+        return now-s.connectedAt>=c.integer("route-fallback-delay-milliseconds",3000);
     }
     private void failed(Player p,Session s,Network n,String reason) {
         s.action=reason+"; no automatic destination retry";logger.warn("HostRouter routing failed for {} on {}: {}",p.getUsername(),n.name(),reason);

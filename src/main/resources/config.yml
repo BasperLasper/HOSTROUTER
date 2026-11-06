@@ -6,4 +6,13 @@ ping-timeout-seconds: 4
 health-failure-threshold: 3
 count-refresh-seconds: 2
 auth-check-milliseconds: 500
+# Wait before moving a player from the lobby to the destination. Moving a client that is
+# still loading the lobby crashes it ("unknown packet id"), which hit premium players who
+# are logged in instantly.
+# Grace period after PeakLogin reports the client has joined the lobby:
+route-delay-milliseconds: 1000
+# If that report never arrives (e.g. PeakLoginPaper missing on the lobby), move them anyway after:
+route-ready-timeout-milliseconds: 15000
+# Fixed delay used when the installed PeakLogin is too old to report readiness:
+route-fallback-delay-milliseconds: 3000
 global-max-players: 500

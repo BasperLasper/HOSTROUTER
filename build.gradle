@@ -1,6 +1,6 @@
 plugins { id 'java' }
 group = 'com.peakmc'
-version = '1.0.4'
+version = '1.0.6'
 repositories { mavenLocal(); mavenCentral(); maven { url = uri('https://repo.papermc.io/repository/maven-public/') } }
 java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
 dependencies {

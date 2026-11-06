@@ -41,7 +41,7 @@ public final class RouterCommand implements SimpleCommand {
         String root=a.length==0?"help":a[0].toLowerCase(Locale.ROOT);
         switch(root) {
             case "help"->help(s);
-            case "version"->say(s,"HostRouter 1.0.4 • Velocity 4.2.0 • Java 25");
+            case "version"->say(s,"HostRouter 1.0.6 • Velocity 4.2.0 • Java 25");
             case "status"->say(s,"HostRouter: "+p.config.get().networks().size()+" networks; "+p.sessions.size()+" assigned sessions\n"+p.auth.status()+"\nStatistics: "+(p.stats!=null && p.stats.available()?"available":"unavailable")+"; webhook drops: "+p.webhooks.dropped());
             case "servers"->{for(var server:p.proxy.getAllServers())say(s,server.getServerInfo().getName()+": "+p.monitor.status(server.getServerInfo().getName())+"; players="+server.getPlayersConnected().size());}
             case "list"->networks(s);

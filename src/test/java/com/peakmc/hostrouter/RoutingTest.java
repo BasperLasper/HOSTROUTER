@@ -24,7 +24,24 @@ class RoutingTest {
         request=mock(ConnectionRequestBuilder.class);when(player.createConnectionRequest(smp)).thenReturn(request);
         var result=mock(ConnectionRequestBuilder.Result.class);when(result.isSuccessful()).thenReturn(true);when(request.connect()).thenReturn(CompletableFuture.completedFuture(result));
         session=new Session(new HostnameMatcher().match("play.peaksmp.us",p.config.get().networks().values()));p.sessions.put(uuid,session);
+        // Existing tests: client already loaded long ago.
+        when(p.auth.ready(any())).thenReturn(Authentication.Ready.READY);session.connectedAt=1;session.readyAt=1;
     }
+    Session fresh(){Session s=new Session(new HostnameMatcher().match("play.peaksmp.us",p.config.get().networks().values()));p.sessions.put(player.getUniqueId(),s);when(p.auth.authenticated(player)).thenReturn(true);return s;}
+    @Test void premiumPlayerWaitsForClientReadyPlusGrace(){long[] t={10_000};p.clock=()->t[0];Session s=fresh();
+        when(p.auth.ready(any())).thenReturn(Authentication.Ready.LOADING);
+        p.connected(new ServerPostConnectEvent(player,null));verify(player,never()).createConnectionRequest(any());assertEquals("Waiting for client to finish loading",s.action);
+        t[0]+=2_000;when(p.auth.ready(any())).thenReturn(Authentication.Ready.READY);p.connected(new ServerPostConnectEvent(player,lobby));verify(player,never()).createConnectionRequest(any());
+        t[0]+=999;p.connected(new ServerPostConnectEvent(player,lobby));verify(player,never()).createConnectionRequest(any());
+        t[0]+=1;p.connected(new ServerPostConnectEvent(player,lobby));verify(player,times(1)).createConnectionRequest(smp);}
+    @Test void missingReadySignalRoutesAfterTimeout(){long[] t={10_000};p.clock=()->t[0];fresh();
+        when(p.auth.ready(any())).thenReturn(Authentication.Ready.LOADING);
+        p.connected(new ServerPostConnectEvent(player,null));t[0]+=14_999;p.connected(new ServerPostConnectEvent(player,lobby));verify(player,never()).createConnectionRequest(any());
+        t[0]+=1;p.connected(new ServerPostConnectEvent(player,lobby));verify(player,times(1)).createConnectionRequest(smp);}
+    @Test void oldPeakLoginUsesFixedDelay(){long[] t={10_000};p.clock=()->t[0];fresh();
+        when(p.auth.ready(any())).thenReturn(Authentication.Ready.UNSUPPORTED);
+        p.connected(new ServerPostConnectEvent(player,null));t[0]+=2_999;p.connected(new ServerPostConnectEvent(player,lobby));verify(player,never()).createConnectionRequest(any());
+        t[0]+=1;p.connected(new ServerPostConnectEvent(player,lobby));verify(player,times(1)).createConnectionRequest(smp);}
     @AfterEach void close(){p.administration.shutdownNow();}
     @Test void authenticationGateAndExactlyOneTransfer(){p.connected(new ServerPostConnectEvent(player,null));verify(player,never()).createConnectionRequest(any());assertFalse(session.routed.get());when(p.auth.authenticated(player)).thenReturn(true);p.connected(new ServerPostConnectEvent(player,lobby));p.connected(new ServerPostConnectEvent(player,lobby));verify(player,times(1)).createConnectionRequest(smp);assertTrue(session.routed.get());assertTrue(session.action.startsWith("Transferred"));}
     @Test void disconnectedPlayerCannotBeTransferred(){when(p.auth.authenticated(player)).thenReturn(true);when(player.isActive()).thenReturn(false);p.connected(new ServerPostConnectEvent(player,null));verify(player,never()).createConnectionRequest(any());}
